@@ -1,25 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, 
-  Tooltip, Legend, ResponsiveContainer, Label
+  Tooltip, ResponsiveContainer, Label, BarChart, Bar,
+  PieChart, Pie, Cell, Legend
 } from 'recharts';
 import _ from 'lodash';
 import Papa from 'papaparse';
 import './App.css';
 
-const App = () => {
+function App() {
   const [data, setData] = useState([]);
   const [activeCandidate, setActiveCandidate] = useState('victorPonta');
   const [correlations, setCorrelations] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [viewMode, setViewMode] = useState('correlation');  // correlation, countyRanking, candidateComparison
+  const [selectedCounty, setSelectedCounty] = useState(null);
+  const [sortBy, setSortBy] = useState('turnout'); // turnout, candidate
   
   useEffect(() => {
     const fetchData = async () => {
       try {
         // Încarcă fișierele CSV folosind fetch
-        const voterResponse = await fetch('/presence_now (1).csv');
-        const trendsResponse = await fetch('/geoMap (1).csv');
+        const voterResponse = await fetch(`${process.env.PUBLIC_URL}/presence_now (1).csv`);
+        const trendsResponse = await fetch(`${process.env.PUBLIC_URL}/geoMap (1).csv`);
         
         if (!voterResponse.ok || !trendsResponse.ok) {
           throw new Error('Eroare la încărcarea fișierelor CSV');
@@ -253,11 +257,25 @@ const App = () => {
     setActiveCandidate(candidate);
   };
 
+  const handleViewModeChange = (mode) => {
+    setViewMode(mode);
+  };
+
   // Round numbers for more readable display
   const formatNumber = (num) => {
     return num.toFixed(2);
   };
   
+  // Sortează județele în funcție de criteriul selectat
+  const getSortedCounties = () => {
+    if (sortBy === 'turnout') {
+      return [...data].sort((a, b) => b.turnoutPercentage - a.turnoutPercentage);
+    } else {
+      return [...data].sort((a, b) => b[activeCandidate] - a[activeCandidate]);
+    }
+  };
+  
+  // Tooltip personalizat pentru graficul de corelație
   const CustomTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
@@ -272,65 +290,9 @@ const App = () => {
     return null;
   };
   
-  if (loading) {
+  // Grafic de corelație între prezența la vot și interesul de căutare
+  const renderCorrelationChart = () => {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <p>Se încarcă datele...</p>
-      </div>
-    );
-  }
-  
-  if (error) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <p className="text-red-500">Eroare: {error}</p>
-        <p>Verifică dacă fișierele CSV sunt în folderul public și numele lor sunt corecte.</p>
-      </div>
-    );
-  }
-  
-  return (
-    <div className="flex flex-col p-4 h-full">
-      <h2 className="text-xl font-bold mb-4">Corelația dintre interesul de căutare pentru candidați și prezența la vot</h2>
-      
-      <div className="mb-4">
-        <div className="flex items-center mb-2">
-          <span className="font-semibold mr-2">Selectează candidatul:</span>
-          <div className="flex space-x-2">
-            {['victorPonta', 'nicusorDan', 'crinAntonescu', 'georgeSimion'].map((candidate) => (
-              <button
-                key={candidate}
-                onClick={() => handleCandidateChange(candidate)}
-                className={`px-3 py-1 rounded ${
-                  activeCandidate === candidate 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-gray-200 hover:bg-gray-300'
-                }`}
-              >
-                {getCandidateTitle(candidate)}
-              </button>
-            ))}
-          </div>
-        </div>
-        {correlations[activeCandidate] !== undefined && (
-          <p className="text-base">
-            <span className="font-semibold">Coeficient de corelație:</span>{' '}
-            <span className={`${
-              correlations[activeCandidate] > 0.2 ? 'text-green-600 font-bold' : 
-              correlations[activeCandidate] < -0.2 ? 'text-red-600 font-bold' : 
-              'text-gray-600'
-            }`}>
-              {formatCorrelation(correlations[activeCandidate])}
-            </span>
-            {correlations[activeCandidate] > 0.2 ? 
-              ' (Corelație pozitivă puternică)' : 
-              correlations[activeCandidate] < -0.2 ? 
-              ' (Corelație negativă puternică)' : 
-              ' (Corelație slabă/inexistentă)'}
-          </p>
-        )}
-      </div>
-      
       <div className="flex-grow bg-white p-4 rounded border border-gray-300 h-96">
         {data.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
@@ -373,29 +335,336 @@ const App = () => {
           </div>
         )}
       </div>
-      
-      <div className="mt-4 bg-white p-4 rounded border border-gray-300">
-        <h3 className="font-bold mb-2">Analiză:</h3>
-        <p>
-          {correlations.victorPonta > 0.2 ? 
-            "Victor Ponta arată o corelație pozitivă cu prezența la vot, sugerând că zonele cu un interes mai mare de căutare pentru Ponta tind să aibă rate de participare mai ridicate." :
-           correlations.victorPonta < -0.2 ? 
-            "Victor Ponta arată o corelație negativă cu prezența la vot, sugerând că zonele cu un interes mai mare de căutare pentru Ponta tind să aibă rate de participare mai scăzute." :
-            "Victor Ponta arată o corelație pozitivă slabă (0.30) cu prezența la vot. Zonele cu un interes mai mare pentru Ponta tind să aibă o prezență la vot ușor mai ridicată."
-          }
-        </p>
-        <p className="mt-2">
-          {correlations.georgeSimion < -0.1 ? 
-            "George Simion prezintă o corelație ușor negativă (-0.14) cu prezența la vot, sugerând că regiunile cu interes mai mare pentru Simion ar putea avea o participare electorală ceva mai scăzută." :
-            "George Simion nu prezintă aproape nicio corelație cu prezența la vot."
-          }
-        </p>
-        <p className="mt-2">
-          Nicușor Dan și Crin Antonescu nu prezintă practic nicio corelație cu modelele de prezență la vot, sugerând că popularitatea lor nu este legată de ratele de participare.
-        </p>
+    );
+  };
+  
+  // Graficul de clasament al județelor
+  const renderCountyRankingChart = () => {
+    const sortedData = getSortedCounties().slice(0, 15); // Doar primele 15 județe
+    
+    return (
+      <div className="flex-grow bg-white p-4 rounded border border-gray-300 h-96">
+        <div className="mb-3">
+          <span className="font-semibold mr-2">Sortează după:</span>
+          <div className="inline-flex space-x-2">
+            <button
+              onClick={() => setSortBy('turnout')}
+              className={`px-3 py-1 rounded ${
+                sortBy === 'turnout' 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-gray-200 hover:bg-gray-300'
+              }`}
+            >
+              Prezență la vot
+            </button>
+            <button
+              onClick={() => setSortBy('candidate')}
+              className={`px-3 py-1 rounded ${
+                sortBy === 'candidate' 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-gray-200 hover:bg-gray-300'
+              }`}
+            >
+              Interes pentru {getCandidateTitle(activeCandidate)}
+            </button>
+          </div>
+        </div>
+        
+        <ResponsiveContainer width="100%" height="85%">
+          <BarChart
+            layout="vertical"
+            data={sortedData}
+            margin={{ top: 5, right: 30, left: 60, bottom: 5 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis type="number" domain={[0, sortBy === 'turnout' ? 35 : 70]} />
+            <YAxis 
+              dataKey="county" 
+              type="category" 
+              width={100} 
+              tick={{ fontSize: 12 }} 
+            />
+            <Tooltip />
+            <Bar 
+              dataKey={sortBy === 'turnout' ? 'turnoutPercentage' : activeCandidate} 
+              fill={sortBy === 'turnout' ? '#4299e1' : getCandidateColor(activeCandidate)} 
+              name={sortBy === 'turnout' ? 'Prezență la vot (%)' : `Interes pentru ${getCandidateTitle(activeCandidate)} (%)`}
+            />
+          </BarChart>
+        </ResponsiveContainer>
       </div>
+    );
+  };
+  
+  // Obține datele pentru graficul de comparație între candidați pentru un județ selectat
+  const getCountyComparisonData = () => {
+    if (!selectedCounty) return [];
+    
+    const county = data.find(c => c.countyCode === selectedCounty);
+    if (!county) return [];
+    
+    return [
+      { name: 'Nicușor Dan', value: county.nicusorDan, color: getCandidateColor('nicusorDan') },
+      { name: 'Crin Antonescu', value: county.crinAntonescu, color: getCandidateColor('crinAntonescu') },
+      { name: 'George Simion', value: county.georgeSimion, color: getCandidateColor('georgeSimion') },
+      { name: 'Victor Ponta', value: county.victorPonta, color: getCandidateColor('victorPonta') }
+    ];
+  };
+  
+  // Grafic pentru compararea candidaților într-un județ
+  const renderCandidateComparisonChart = () => {
+    const comparisonData = getCountyComparisonData();
+    const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff8042'];
+    
+    return (
+      <div className="flex-grow bg-white p-4 rounded border border-gray-300 h-96">
+        <div className="mb-3">
+          <span className="font-semibold mr-2">Selectează un județ:</span>
+          <select 
+            value={selectedCounty || ''} 
+            onChange={(e) => setSelectedCounty(e.target.value)}
+            className="px-3 py-1 rounded border border-gray-300"
+          >
+            <option value="">Selectează...</option>
+            {data.map(county => (
+              <option key={county.countyCode} value={county.countyCode}>
+                {county.county} ({county.countyCode})
+              </option>
+            ))}
+          </select>
+        </div>
+        
+        {selectedCounty ? (
+          <ResponsiveContainer width="100%" height="85%">
+            <PieChart>
+              <Pie
+                data={comparisonData}
+                cx="50%"
+                cy="50%"
+                labelLine={true}
+                outerRadius={120}
+                fill="#8884d8"
+                dataKey="value"
+                nameKey="name"
+                label={({name, value}) => `${name}: ${value}%`}
+              >
+                {comparisonData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(value) => `${value}%`} />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="flex h-full items-center justify-center">
+            <p>Selectează un județ pentru a vedea comparația între candidați</p>
+          </div>
+        )}
+      </div>
+    );
+  };
+  
+  // Secțiunea cu analiza pentru toate vizualizările
+  const renderAnalysisSection = () => {
+    if (viewMode === 'correlation') {
+      return (
+        <div className="mt-4 bg-white p-4 rounded border border-gray-300">
+          <h3 className="font-bold mb-2">Analiză corelație:</h3>
+          <p>
+            {correlations.victorPonta > 0.2 ? 
+              "Victor Ponta arată o corelație pozitivă cu prezența la vot, sugerând că zonele cu un interes mai mare de căutare pentru Ponta tind să aibă rate de participare mai ridicate." :
+             correlations.victorPonta < -0.2 ? 
+              "Victor Ponta arată o corelație negativă cu prezența la vot, sugerând că zonele cu un interes mai mare de căutare pentru Ponta tind să aibă rate de participare mai scăzute." :
+              "Victor Ponta arată o corelație pozitivă slabă (0.30) cu prezența la vot. Zonele cu un interes mai mare pentru Ponta tind să aibă o prezență la vot ușor mai ridicată."
+            }
+          </p>
+          <p className="mt-2">
+            {correlations.georgeSimion < -0.1 ? 
+              "George Simion prezintă o corelație ușor negativă (-0.14) cu prezența la vot, sugerând că regiunile cu interes mai mare pentru Simion ar putea avea o participare electorală ceva mai scăzută." :
+              "George Simion nu prezintă aproape nicio corelație cu prezența la vot."
+            }
+          </p>
+          <p className="mt-2">
+            Nicușor Dan și Crin Antonescu nu prezintă practic nicio corelație cu modelele de prezență la vot, sugerând că popularitatea lor nu este legată de ratele de participare.
+          </p>
+        </div>
+      );
+    } else if (viewMode === 'countyRanking') {
+      return (
+        <div className="mt-4 bg-white p-4 rounded border border-gray-300">
+          <h3 className="font-bold mb-2">Analiză județe:</h3>
+          <p>
+            Județele cu cea mai mare prezență la vot sunt în general cele urbane și din proximitatea capitalei.
+            Acestea tind să aibă o participare electorală mai activă.
+          </p>
+          <p className="mt-2">
+            {activeCandidate === 'victorPonta' && 
+              "Victor Ponta are cel mai mare interes de căutare în județele din Moldova și sudul țării, zone cu tradiție pentru partidul său."}
+            {activeCandidate === 'nicusorDan' && 
+              "Nicușor Dan are cel mai mare interes de căutare în zonele urbane și în județe precum Vrancea și Satu Mare, deși este mai cunoscut ca politician bucureștean."}
+            {activeCandidate === 'crinAntonescu' && 
+              "Crin Antonescu are cel mai mare interes de căutare în județe precum Tulcea, Alba și Harghita, indicând diversitatea geografică a sprijinului său."}
+            {activeCandidate === 'georgeSimion' && 
+              "George Simion are cel mai mare interes de căutare în județe din vest precum Caraș-Severin și Arad, dar și în zone din sudul țării."}
+          </p>
+        </div>
+      );
+    } else if (viewMode === 'candidateComparison') {
+      return (
+        <div className="mt-4 bg-white p-4 rounded border border-gray-300">
+          <h3 className="font-bold mb-2">Analiză comparativă:</h3>
+          {selectedCounty ? (
+            <p>
+              {data.find(c => c.countyCode === selectedCounty)?.county} are o prezență la vot de {formatNumber(data.find(c => c.countyCode === selectedCounty)?.turnoutPercentage)}%. 
+              Candidatul cu cel mai mare interes de căutare în acest județ este {
+                (() => {
+                  const county = data.find(c => c.countyCode === selectedCounty);
+                  if (!county) return '';
+                  
+                  const maxValue = Math.max(
+                    county.nicusorDan, 
+                    county.crinAntonescu, 
+                    county.georgeSimion, 
+                    county.victorPonta
+                  );
+                  
+                  if (maxValue === county.nicusorDan) return 'Nicușor Dan';
+                  if (maxValue === county.crinAntonescu) return 'Crin Antonescu';
+                  if (maxValue === county.georgeSimion) return 'George Simion';
+                  if (maxValue === county.victorPonta) return 'Victor Ponta';
+                  return '';
+                })()
+              } cu {
+                (() => {
+                  const county = data.find(c => c.countyCode === selectedCounty);
+                  if (!county) return '';
+                  
+                  const maxValue = Math.max(
+                    county.nicusorDan, 
+                    county.crinAntonescu, 
+                    county.georgeSimion, 
+                    county.victorPonta
+                  );
+                  
+                  return maxValue;
+                })()
+              }% din căutări.
+            </p>
+          ) : (
+            <p>Selectează un județ pentru a vedea o analiză detaliată a interesului pentru candidați.</p>
+          )}
+          <p className="mt-2">
+            La nivel național, Crin Antonescu și Nicușor Dan au cele mai multe căutări, în timp ce Victor Ponta are cel mai puternic raport între căutări și prezența la vot.
+          </p>
+        </div>
+      );
+    }
+    
+    return null;
+  };
+  
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <p>Se încarcă datele...</p>
+      </div>
+    );
+  }
+  
+  if (error) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <p className="text-red-500">Eroare: {error}</p>
+        <p>Verifică dacă fișierele CSV sunt în folderul public și numele lor sunt corecte.</p>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="flex flex-col p-4 space-y-4">
+      <h1 className="text-2xl font-bold">Dashboard Analiză Electorală: Prezența la vot și Interesul de căutare</h1>
+      
+      <div className="bg-white p-4 rounded border border-gray-300">
+        <div className="flex items-center mb-4">
+          <span className="font-semibold mr-4">Selectează candidatul:</span>
+          <div className="flex space-x-2">
+            {['victorPonta', 'nicusorDan', 'crinAntonescu', 'georgeSimion'].map((candidate) => (
+              <button
+                key={candidate}
+                onClick={() => handleCandidateChange(candidate)}
+                className={`px-3 py-1 rounded ${
+                  activeCandidate === candidate 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-gray-200 hover:bg-gray-300'
+                }`}
+              >
+                {getCandidateTitle(candidate)}
+              </button>
+            ))}
+          </div>
+        </div>
+        
+        <div className="flex items-center">
+          <span className="font-semibold mr-4">Tip vizualizare:</span>
+          <div className="flex space-x-2">
+            <button
+              onClick={() => handleViewModeChange('correlation')}
+              className={`px-3 py-1 rounded ${
+                viewMode === 'correlation' 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-gray-200 hover:bg-gray-300'
+              }`}
+            >
+              Corelație
+            </button>
+            <button
+              onClick={() => handleViewModeChange('countyRanking')}
+              className={`px-3 py-1 rounded ${
+                viewMode === 'countyRanking' 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-gray-200 hover:bg-gray-300'
+              }`}
+            >
+              Clasament județe
+            </button>
+            <button
+              onClick={() => handleViewModeChange('candidateComparison')}
+              className={`px-3 py-1 rounded ${
+                viewMode === 'candidateComparison' 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-gray-200 hover:bg-gray-300'
+              }`}
+            >
+              Comparație candidați
+            </button>
+          </div>
+        </div>
+        
+        {correlations[activeCandidate] !== undefined && viewMode === 'correlation' && (
+          <div className="mt-3">
+            <span className="font-semibold">Coeficient de corelație:</span>{' '}
+            <span className={`${
+              correlations[activeCandidate] > 0.2 ? 'text-green-600 font-bold' : 
+              correlations[activeCandidate] < -0.2 ? 'text-red-600 font-bold' : 
+              'text-gray-600'
+            }`}>
+              {formatCorrelation(correlations[activeCandidate])}
+            </span>
+            {correlations[activeCandidate] > 0.2 ? 
+              ' (Corelație pozitivă puternică)' : 
+              correlations[activeCandidate] < -0.2 ? 
+              ' (Corelație negativă puternică)' : 
+              ' (Corelație slabă/inexistentă)'}
+          </div>
+        )}
+      </div>
+      
+      {viewMode === 'correlation' && renderCorrelationChart()}
+      {viewMode === 'countyRanking' && renderCountyRankingChart()}
+      {viewMode === 'candidateComparison' && renderCandidateComparisonChart()}
+      
+      {renderAnalysisSection()}
     </div>
   );
-};
-
-export default App;
+}
