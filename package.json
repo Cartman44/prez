@@ -2,7 +2,7 @@
   "name": "analiza-electorala",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://cartman44.github.io/vot",
+  "homepage": "https://cartman44.github.io/prez",
   "dependencies": {
     "@testing-library/jest-dom": "^5.16.5",
     "@testing-library/react": "^13.4.0",
